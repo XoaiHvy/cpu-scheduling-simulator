@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CPU Scheduling Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div class="title">CPU Scheduler</div>
+      </div>
+      <nav>
+        <a id="navDashboard" class="active">Dashboard</a>
+        <a id="navSimulator">Simulator</a>
+        <a id="navReports">Reports</a>
+        <a id="navAbout">About</a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="indicator">
+          <span class="dot blinking"></span>
+          <span>Live</span>
+        </div>
+        <div class="credits">OS Midterm</div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <h1 data-i18n="projectTitle">CPU Scheduling Simulator</h1>
+        <div class="top-actions">
+          <select id="langSelect" aria-label="Language">
+            <option value="vi">Tiếng Việt</option>
+            <option value="en">English</option>
+          </select>
+          <button id="settingsBtn" class="btn small">Settings</button>
+          <button id="themeToggle" class="btn small">Chủ đề</button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-left glass">
+          <h2 data-i18n="systemMonitor">System Monitor</h2>
+          <p class="muted" data-i18n="muted">Futuristic OS dashboard — demo for scheduling algorithms</p>
+          <div class="stats-row">
+            <div class="stat card">
+              <div class="label" data-i18n="CPUUsage">CPU Usage</div>
+              <div class="value"><span id="cpuPercent">12</span>%</div>
+              <div class="cpu-bar"><div id="cpuBarInner"></div></div>
+            </div>
+            <div class="stat card">
+              <div class="label" data-i18n="Running">Running</div>
+              <div class="value" id="runningCount">0</div>
+              <div class="muted">Active processes</div>
+            </div>
+            <div class="stat card">
+              <div class="label" data-i18n="Queue">Queue</div>
+              <div class="value" id="queueCount">0</div>
+              <div class="muted">Waiting processes</div>
+            </div>
+            <div class="stat card">
+              <div class="label" data-i18n="Algorithm">Algorithm</div>
+              <div class="value" id="currentAlgo">FCFS</div>
+            </div>
+          </div>
+        </div>
+        <div class="hero-right glass">
+            <h3 data-i18n="Controls">Controls</h3>
+            <form id="processForm" class="form">
+              <div class="row">
+                <div class="field">
+                  <label for="pid" data-i18n="pidLabel">Process ID</label>
+                  <input id="pid" placeholder="P1" title="Unique process identifier (e.g., P1)" required>
+                  <div class="helper muted small" data-i18n="pidHelper">Use a short ID, e.g. P1</div>
+                </div>
+
+                <div class="field">
+                  <label for="arrival" data-i18n="arrivalLabel">Arrival Time</label>
+                  <input id="arrival" type="number" min="0" value="0" placeholder="0" title="Arrival time in time units" required>
+                  <div class="helper muted small" data-i18n="arrivalHelper">Time when the process becomes ready (>=0)</div>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="burst" data-i18n="burstLabel">Burst Time</label>
+                  <input id="burst" type="number" min="1" value="5" placeholder="5" title="CPU burst length" required>
+                  <div class="helper muted small" data-i18n="burstHelper">CPU time required for the process</div>
+                </div>
+
+                <div class="field">
+                  <label for="priority" data-i18n="priorityLabel">Priority</label>
+                  <input id="priority" type="number" min="0" value="1" placeholder="1" title="Lower value = higher priority (optional)">
+                  <div class="helper muted small" data-i18n="priorityHelper">Optional; used by priority-based schedulers</div>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="algorithm" data-i18n="algorithmLabel">Algorithm</label>
+                  <select id="algorithm">
+                    <option value="FCFS">FCFS</option>
+                    <option value="SJF">SJF (Non-preemptive)</option>
+                    <option value="RR">Round Robin</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="quantum" data-i18n="quantumLabel">Quantum Time</label>
+                  <input id="quantum" type="number" min="1" value="2" placeholder="2" title="Time quantum for Round Robin">
+                  <div class="helper muted small" data-i18n="quantumHelper">Only used by Round Robin</div>
+                </div>
+              </div>
+
+              <div class="controls">
+                <button type="button" id="addBtn" class="btn accent" data-i18n="addProcess">Add Process</button>
+                <button type="button" id="runBtn" class="btn" data-i18n="runSimulation">Run Simulation</button>
+                <button type="button" id="clearBtn" class="btn ghost" data-i18n="clearAll">Clear All</button>
+              </div>
+            </form>
+        </div>
+      </section>
+
+      <section class="content">
+        <div id="simArea" class="left-col">
+          <div class="card glass processes">
+            <h3 data-i18n="processList">Process List</h3>
+            <table id="procTable">
+              <thead>
+                <tr><th>PID</th><th>Arrival</th><th>Burst</th><th>Priority</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="table-actions">
+              <button id="removeLast" class="btn small">Remove Last</button>
+            </div>
+          </div>
+
+          <div class="card glass gantt-card">
+            <h3 data-i18n="ganttChart">Gantt Chart</h3>
+            <div id="gantt" class="gantt"></div>
+            <div id="timeline" class="timeline"></div>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div class="card glass stats">
+            <h3 data-i18n="statistics">Statistics</h3>
+            <div class="stats-grid">
+              <div class="stat-card glass">
+                <div class="label" data-i18n="averageWaiting">Average Waiting</div>
+                <div class="big" id="avgWaiting">-</div>
+              </div>
+              <div class="stat-card glass">
+                <div class="label" data-i18n="averageTurnaround">Average Turnaround</div>
+                <div class="big" id="avgTurnaround">-</div>
+              </div>
+              <div class="stat-card glass">
+                <div class="label" data-i18n="Algorithm">Algorithm</div>
+                <div class="big" id="algoLabel">-</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card glass charts">
+            <h3 data-i18n="comparisons">Comparisons</h3>
+            <canvas id="waitingChart"></canvas>
+            <canvas id="turnaroundChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">Designed for OS Midterm Demo — Animated UX</footer>
+    </div>
+  </div>
+
+  <!-- Modal overlay and lightweight modals (hidden by default) -->
+    <div id="modalOverlay" class="modal-overlay" style="display:none">
+    <div id="reportsModal" class="modal" role="dialog" aria-hidden="true">
+      <button class="modal-close btn small" data-modal="reportsModal">Close</button>
+      <h3>Reports &amp; Analytics</h3>
+      <div id="reportsContent">
+        <div class="row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+          <div style="flex:1;min-width:140px"><strong>Average Waiting</strong><div id="avgWaitReport">-</div></div>
+          <div style="flex:1;min-width:140px"><strong>Average Turnaround</strong><div id="avgTurnReport">-</div></div>
+          <div style="flex:1;min-width:160px"><strong>Algorithm</strong><div id="reportAlgo">-</div></div>
+        </div>
+
+        <h4 style="margin-top:6px">Process Summary</h4>
+        <div style="max-height:200px;overflow:auto;margin-bottom:8px">
+          <table id="reportProcTable" style="width:100%;border-collapse:collapse">
+            <thead><tr><th>PID</th><th>Arrival</th><th>Burst</th><th>Completion</th><th>Turnaround</th><th>Waiting</th></tr></thead>
+            <tbody id="reportProcTableBody"></tbody>
+          </table>
+        </div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:280px"><canvas id="modalWaitingChart"></canvas></div>
+          <div style="flex:1;min-width:280px"><canvas id="modalTurnChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="aboutModal" class="modal" role="dialog" aria-hidden="true">
+      <button class="modal-close btn small" data-modal="aboutModal">Close</button>
+      <h3>About</h3>
+      <p class="muted">A university project demonstrating FCFS, SJF and Round Robin scheduling algorithms with visualizations.</p>
+    </div>
+
+    <div id="settingsModal" class="modal" role="dialog" aria-hidden="true">
+      <button class="modal-close btn small" data-modal="settingsModal">Close</button>
+      <h3>Settings</h3>
+      <div class="row"><label><input type="checkbox" id="darkModeSwitchModal"> Dark Mode</label></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
