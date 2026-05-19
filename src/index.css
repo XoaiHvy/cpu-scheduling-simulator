@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -15,26 +15,81 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  color: #0f172a;
   background:
-    linear-gradient(135deg, rgba(14, 165, 233, 0.12), transparent 28%),
-    linear-gradient(225deg, rgba(16, 185, 129, 0.10), transparent 30%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.08), transparent 320px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.07), rgba(244, 63, 94, 0.04)),
     #f8fafc;
 }
 
 .dark body {
-  color: #e2e8f0;
   background:
-    linear-gradient(135deg, rgba(14, 165, 233, 0.16), transparent 30%),
-    linear-gradient(225deg, rgba(244, 114, 182, 0.12), transparent 28%),
-    #0f172a;
+    linear-gradient(180deg, rgba(14, 165, 233, 0.12), transparent 320px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.08), rgba(244, 63, 94, 0.08)),
+    #020617;
 }
 
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  margin: 0;
+button,
+select {
+  font: inherit;
 }
 
-input[type="number"] {
-  appearance: textfield;
+@layer components {
+  .panel {
+    @apply rounded-lg border border-slate-200 bg-white/95 p-4 shadow-soft backdrop-blur dark:border-slate-800 dark:bg-slate-950/90;
+  }
+
+  .panel-heading {
+    @apply mb-4;
+  }
+
+  .panel-kicker {
+    @apply text-sm font-extrabold text-sky-700 dark:text-sky-300;
+  }
+
+  .panel-title {
+    @apply mt-1 text-xl font-extrabold text-slate-950 dark:text-white;
+  }
+
+  .field-label {
+    @apply mb-2 block text-sm font-extrabold text-slate-700 dark:text-slate-200;
+  }
+
+  .field {
+    @apply h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-sky-950;
+  }
+
+  .btn-primary {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-sky-700;
+  }
+
+  .btn-secondary {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700;
+  }
+
+  .btn-danger {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-rose-700;
+  }
+
+  .btn-dark {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200;
+  }
+
+  .btn-muted {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  }
+
+  .segmented {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800;
+  }
+
+  .segmented-active {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-sky-500 bg-sky-50 px-3 text-sm font-extrabold text-sky-800 shadow-sm dark:border-sky-500 dark:bg-sky-950 dark:text-sky-100;
+  }
+}
+
+.graph-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.14) 1px, transparent 1px);
+  background-size: 28px 28px;
 }

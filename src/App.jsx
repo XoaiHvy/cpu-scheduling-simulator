@@ -1,232 +1,346 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import AlgorithmSelector from "./components/AlgorithmSelector";
-import ComparisonTable from "./components/ComparisonTable";
-import ExplanationPanel from "./components/ExplanationPanel";
-import GanttChart from "./components/GanttChart";
-import Glossary from "./components/Glossary";
+import { useEffect, useMemo, useState } from "react";
 import Header from "./components/Header";
-import ProcessInputTable from "./components/ProcessInputTable";
-import ResultTable from "./components/ResultTable";
-import SimulationBoard from "./components/SimulationBoard";
-import StatsCards from "./components/StatsCards";
-import { sampleProcesses, roundRobinSampleProcesses, withProcessColors } from "./data/sampleProcesses";
-import { runSchedulingAlgorithm } from "./utils/schedulingAlgorithms";
+import ControlPanel from "./components/ControlPanel";
+import GraphCanvas from "./components/GraphCanvas";
+import StatusPanel from "./components/StatusPanel";
+import EventLog from "./components/EventLog";
+import TheoryPanel from "./components/TheoryPanel";
+import RecoveryPanel from "./components/RecoveryPanel";
+import ScenarioButtons from "./components/ScenarioButtons";
+import { detectDeadlock, enrichGraph } from "./utils/deadlockDetection";
+import { sampleScenarios } from "./utils/sampleScenarios";
 
-function validateInputs(processes, algorithm, timeQuantum) {
-  if (!processes.length) return "Cần có ít nhất một tiến trình.";
+const emptyDetection = {
+  ...detectDeadlock([], [], []),
+  checked: false,
+  version: 0,
+};
 
-  const ids = new Set();
-  for (const process of processes) {
-    if (!String(process.id).trim()) return "Process ID không được để trống.";
-    if (ids.has(process.id)) return `Process ID ${process.id} bị trùng.`;
-    ids.add(process.id);
-    if (Number(process.arrivalTime) < 0 || Number.isNaN(Number(process.arrivalTime))) {
-      return `Arrival Time của ${process.id} phải >= 0.`;
-    }
-    if (Number(process.burstTime) <= 0 || Number.isNaN(Number(process.burstTime))) {
-      return `Burst Time của ${process.id} phải > 0.`;
-    }
-  }
-
-  if (algorithm === "RR" && (Number(timeQuantum) <= 0 || Number.isNaN(Number(timeQuantum)))) {
-    return "Time Quantum phải > 0.";
-  }
-
-  return "";
+function makeLog(message, type = "info") {
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    time: new Intl.DateTimeFormat("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date()),
+    message,
+    type,
+  };
 }
 
-function buildObservation(result) {
-  if (!result) return [];
-
-  const order = result.gantt.filter((segment) => segment.type === "process").map((segment) => segment.processId);
-  const uniqueOrder = [...new Set(order)];
-  const averageWaiting = result.stats.averageWaitingTime;
-  const longestProcess = [...result.processes].sort((a, b) => b.burstTime - a.burstTime)[0];
-  const switchCount = Math.max(0, result.gantt.filter((segment) => segment.type === "process").length - 1);
-
-  if (result.algorithm === "FCFS") {
-    return [
-      `Thứ tự chạy: ${uniqueOrder.join(" → ")}.`,
-      `${longestProcess.id} có Burst Time lớn nhất (${longestProcess.burstTime}), nên nếu đến sớm sẽ làm các tiến trình sau chờ lâu.`,
-      averageWaiting >= 8
-        ? "Average Waiting Time khá cao, đây là dấu hiệu của Convoy Effect."
-        : "Average Waiting Time ở mức dễ chấp nhận với bộ dữ liệu hiện tại.",
-    ];
-  }
-
-  if (result.algorithm === "SJF") {
-    return [
-      `Thứ tự chạy: ${uniqueOrder.join(" → ")}.`,
-      "Các tiến trình ngắn được ưu tiên khi đã nằm trong Ready Queue, nên Waiting Time trung bình thường tốt hơn FCFS.",
-      "Hạn chế chính: hệ thống cần biết hoặc dự đoán Burst Time trước khi lập lịch.",
-    ];
-  }
-
-  return [
-    `Time Quantum đang dùng: ${result.timeQuantum}.`,
-    `Số lượt chuyển CPU trong Gantt Chart: ${switchCount}. Quantum nhỏ thường làm số lượt chuyển nhiều hơn.`,
-    "Round Robin công bằng vì mỗi tiến trình đều được nhận CPU theo từng lát thời gian.",
-    result.timeQuantum >= longestProcess.burstTime
-      ? "Quantum khá lớn, hành vi có xu hướng gần giống FCFS."
-      : "Quantum hiện tại giúp tiến trình ngắn có cơ hội phản hồi sớm.",
-  ];
+function nextEntityId(prefix, items) {
+  const pattern = new RegExp(`^${prefix}(\\d+)$`);
+  const max = items.reduce((largest, item) => {
+    const match = pattern.exec(item.id);
+    return match ? Math.max(largest, Number(match[1])) : largest;
+  }, 0);
+  return `${prefix}${max + 1}`;
 }
 
-function Toast({ toast, onClose }) {
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = window.setTimeout(onClose, 3600);
-    return () => window.clearTimeout(timer);
-  }, [toast, onClose]);
-
-  return (
-    <AnimatePresence>
-      {toast && (
-        <motion.div
-          initial={{ opacity: 0, y: -18, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -18, scale: 0.96 }}
-          className={`fixed right-4 top-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border px-4 py-3 shadow-soft ${
-            toast.type === "error"
-              ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-100"
-              : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
-          }`}
-        >
-          {toast.type === "error" ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
-          <p className="text-sm font-semibold">{toast.message}</p>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+function makeEdgeId(type, from, to, index) {
+  return `E${index + 1}-${type}-${from}-${to}`;
 }
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(false);
-  const [selectedAlgorithm, setSelectedAlgorithm] = useState("FCFS");
-  const [timeQuantum, setTimeQuantum] = useState(4);
-  const [processes, setProcesses] = useState(() => withProcessColors(sampleProcesses));
-  const [result, setResult] = useState(null);
-  const [runId, setRunId] = useState(0);
-  const [toast, setToast] = useState(null);
-  const resultRef = useRef(null);
+  const [model, setModel] = useState({
+    processes: [],
+    resources: [],
+    edges: [],
+    version: 0,
+  });
+  const [detection, setDetection] = useState(emptyDetection);
+  const [eventLog, setEventLog] = useState(() => [
+    makeLog("Sẵn sàng mô phỏng Deadlock bằng Resource Allocation Graph.", "info"),
+  ]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
-  const coloredProcesses = useMemo(() => withProcessColors(processes), [processes]);
+  const addLog = (message, type = "info") => {
+    setEventLog((current) => [...current, makeLog(message, type)].slice(-80));
+  };
 
-  useEffect(() => {
-    setProcesses((current) => withProcessColors(current));
-  }, []);
+  const liveAnalysis = useMemo(
+    () => detectDeadlock(model.processes, model.resources, model.edges),
+    [model.processes, model.resources, model.edges],
+  );
 
-  const showToast = (message, type = "success") => setToast({ message, type });
+  const detectionIsCurrent = detection.checked && detection.version === model.version;
 
-  const runSimulation = () => {
-    const nextProcesses = withProcessColors(processes).map((process) => ({
-      ...process,
-      id: String(process.id).trim(),
-      arrivalTime: Number(process.arrivalTime),
-      burstTime: Number(process.burstTime),
-    }));
+  const displayDetection = useMemo(() => {
+    if (detectionIsCurrent) return detection;
 
-    const error = validateInputs(nextProcesses, selectedAlgorithm, timeQuantum);
-    if (error) {
-      showToast(error, "error");
+    const hasData = model.processes.length > 0 || model.resources.length > 0;
+    return {
+      ...liveAnalysis,
+      checked: false,
+      hasDeadlock: false,
+      cycleProcesses: [],
+      cycleResources: [],
+      cycleEdgeIds: [],
+      status: hasData ? (liveAnalysis.waitForEdges.length ? "waiting" : "safe") : "idle",
+      message: hasData ? "Chưa chạy Detect sau thay đổi." : "Chưa có dữ liệu mô phỏng.",
+      version: model.version,
+    };
+  }, [detection, detectionIsCurrent, liveAnalysis, model.processes.length, model.resources.length, model.version]);
+
+  const graphSnapshot = useMemo(
+    () => enrichGraph(model.processes, model.resources, model.edges, displayDetection),
+    [model.processes, model.resources, model.edges, displayDetection],
+  );
+
+  const markDirty = (nextModel) => {
+    setModel(nextModel);
+    setDetection((current) => ({ ...current, checked: false }));
+  };
+
+  const handleAddProcess = () => {
+    const id = nextEntityId("P", model.processes);
+    const nextVersion = model.version + 1;
+    markDirty({
+      ...model,
+      processes: [
+        ...model.processes,
+        {
+          id,
+          name: `Process ${id.slice(1)}`,
+          status: "normal",
+          heldResources: [],
+          waitingFor: [],
+        },
+      ],
+      version: nextVersion,
+    });
+    addLog(`Tạo process ${id}.`, "success");
+  };
+
+  const handleAddResource = () => {
+    const id = nextEntityId("R", model.resources);
+    const nextVersion = model.version + 1;
+    markDirty({
+      ...model,
+      resources: [
+        ...model.resources,
+        {
+          id,
+          name: `Resource ${id.slice(1)}`,
+          instances: 1,
+          allocatedTo: [],
+          requestedBy: [],
+        },
+      ],
+      version: nextVersion,
+    });
+    addLog(`Tạo resource ${id}.`, "success");
+  };
+
+  const handleAddEdge = ({ type, processId, resourceId }) => {
+    if (!processId || !resourceId) {
+      addLog("Cần có ít nhất một process và một resource để tạo cạnh.", "warning");
       return;
     }
 
-    const nextResult = runSchedulingAlgorithm(selectedAlgorithm, nextProcesses, timeQuantum);
-    setProcesses(nextProcesses);
-    setResult(nextResult);
-    setRunId((current) => current + 1);
-    showToast("Mô phỏng đã chạy xong.");
+    const from = type === "request" ? processId : resourceId;
+    const to = type === "request" ? resourceId : processId;
+    const edgeExists = model.edges.some((edge) => edge.type === type && edge.from === from && edge.to === to);
 
-    window.setTimeout(() => {
-      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 180);
+    if (edgeExists) {
+      addLog(`Cạnh ${from} -> ${to} đã tồn tại.`, "warning");
+      return;
+    }
+
+    if (type === "allocation") {
+      const holder = model.edges.find((edge) => edge.type === "allocation" && edge.from === resourceId);
+      if (holder) {
+        addLog(`${resourceId} đã được cấp cho ${holder.to}; resource mẫu chỉ có 1 instance.`, "warning");
+        return;
+      }
+    }
+
+    if (type === "request") {
+      const alreadyHeld = model.edges.some(
+        (edge) => edge.type === "allocation" && edge.from === resourceId && edge.to === processId,
+      );
+      if (alreadyHeld) {
+        addLog(`${processId} đang giữ ${resourceId}, không cần tạo request edge.`, "warning");
+        return;
+      }
+    }
+
+    const cleanedEdges =
+      type === "allocation"
+        ? model.edges.filter(
+            (edge) => !(edge.type === "request" && edge.from === processId && edge.to === resourceId),
+          )
+        : model.edges;
+
+    const edge = {
+      id: makeEdgeId(type, from, to, cleanedEdges.length),
+      type,
+      from,
+      to,
+    };
+
+    const nextVersion = model.version + 1;
+    markDirty({
+      ...model,
+      edges: [...cleanedEdges, edge],
+      version: nextVersion,
+    });
+
+    const label = type === "request" ? "request" : "allocation";
+    addLog(`Tạo ${label} edge: ${from} -> ${to}.`, "info");
   };
 
-  const loadSample = () => {
-    setProcesses(withProcessColors(sampleProcesses));
-    showToast("Đã tải dữ liệu mẫu.");
+  const handleDetect = () => {
+    const result = detectDeadlock(model.processes, model.resources, model.edges);
+    setDetection({
+      ...result,
+      checked: true,
+      version: model.version,
+    });
+
+    const type = result.hasDeadlock ? "danger" : result.status === "waiting" ? "warning" : "success";
+    addLog(result.message, type);
   };
 
-  const loadRoundRobinSample = () => {
-    setProcesses(withProcessColors(roundRobinSampleProcesses));
-    setTimeQuantum(4);
-    showToast("Đã tải dữ liệu mẫu Round Robin.");
+  const handleReset = () => {
+    const nextVersion = model.version + 1;
+    setModel({
+      processes: [],
+      resources: [],
+      edges: [],
+      version: nextVersion,
+    });
+    setDetection({
+      ...detectDeadlock([], [], []),
+      checked: false,
+      version: nextVersion,
+    });
+    addLog("Reset mô phỏng.", "info");
   };
 
-  const reset = () => {
-    setProcesses([]);
-    setResult(null);
-    setRunId((current) => current + 1);
-    showToast("Đã reset dữ liệu.");
+  const handleLoadScenario = (scenarioId) => {
+    const scenario = sampleScenarios.find((item) => item.id === scenarioId);
+    if (!scenario) return;
+
+    const nextVersion = model.version + 1;
+    setModel({
+      processes: scenario.processes,
+      resources: scenario.resources,
+      edges: scenario.edges,
+      version: nextVersion,
+    });
+    setDetection({
+      ...detectDeadlock(scenario.processes, scenario.resources, scenario.edges),
+      checked: false,
+      version: nextVersion,
+    });
+    addLog(`Load ${scenario.title}. Bấm Detect Deadlock để kiểm tra chu trình.`, "info");
   };
 
-  const observations = buildObservation(result);
+  const runRecoveryDetection = (nextModel, actionMessage) => {
+    const result = detectDeadlock(nextModel.processes, nextModel.resources, nextModel.edges);
+    const resolved = detectionIsCurrent && detection.hasDeadlock && !result.hasDeadlock;
+    const finalResult = {
+      ...result,
+      checked: true,
+      version: nextModel.version,
+      status: resolved ? "resolved" : result.status,
+      message: resolved ? "Deadlock resolved - không còn chu trình trong Wait-for Graph." : result.message,
+    };
+
+    setModel(nextModel);
+    setDetection(finalResult);
+    addLog(`${actionMessage} ${finalResult.message}`, resolved ? "success" : result.hasDeadlock ? "danger" : "warning");
+  };
+
+  const handleKillProcess = (processId) => {
+    if (!processId) return;
+
+    const nextModel = {
+      ...model,
+      processes: model.processes.filter((process) => process.id !== processId),
+      edges: model.edges.filter((edge) => edge.from !== processId && edge.to !== processId),
+      version: model.version + 1,
+    };
+
+    runRecoveryDetection(nextModel, `Kill ${processId}: thu hồi tài nguyên và xóa cạnh liên quan.`);
+  };
+
+  const handleReleaseResource = (resourceId) => {
+    if (!resourceId) return;
+
+    const releasedEdges = model.edges.filter((edge) => edge.type === "allocation" && edge.from === resourceId);
+    if (!releasedEdges.length) {
+      addLog(`${resourceId} chưa được cấp cho process nào.`, "warning");
+      return;
+    }
+
+    const nextModel = {
+      ...model,
+      edges: model.edges.filter((edge) => !(edge.type === "allocation" && edge.from === resourceId)),
+      version: model.version + 1,
+    };
+
+    runRecoveryDetection(nextModel, `Release ${resourceId}: gỡ allocation edge.`);
+  };
 
   return (
-    <div className="min-h-screen font-sans text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen font-sans text-slate-950 dark:text-slate-100">
       <Header darkMode={darkMode} onToggleDarkMode={() => setDarkMode((current) => !current)} />
-      <Toast toast={toast} onClose={() => setToast(null)} />
 
       <main className="mx-auto grid max-w-7xl gap-5 px-4 py-5 lg:px-6">
-        <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <ScenarioButtons scenarios={sampleScenarios} onLoadScenario={handleLoadScenario} />
+
+        <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)_330px]">
+          <ControlPanel
+            processes={graphSnapshot.processes}
+            resources={graphSnapshot.resources}
+            nextProcessId={nextEntityId("P", model.processes)}
+            nextResourceId={nextEntityId("R", model.resources)}
+            onAddProcess={handleAddProcess}
+            onAddResource={handleAddResource}
+            onAddEdge={handleAddEdge}
+            onDetect={handleDetect}
+            onReset={handleReset}
+          />
+
+          <GraphCanvas
+            processes={graphSnapshot.processes}
+            resources={graphSnapshot.resources}
+            edges={model.edges}
+            detection={displayDetection}
+            pending={!detectionIsCurrent}
+          />
+
           <div className="grid gap-5">
-            <ProcessInputTable
-              processes={coloredProcesses}
-              setProcesses={setProcesses}
-              selectedAlgorithm={selectedAlgorithm}
-              setSelectedAlgorithm={setSelectedAlgorithm}
-              timeQuantum={timeQuantum}
-              setTimeQuantum={setTimeQuantum}
-              onRun={runSimulation}
-              onLoadSample={loadSample}
-              onLoadRoundRobinSample={loadRoundRobinSample}
-              onReset={reset}
+            <StatusPanel
+              detection={displayDetection}
+              detectionIsCurrent={detectionIsCurrent}
+              processCount={model.processes.length}
+              resourceCount={model.resources.length}
+              edgeCount={model.edges.length}
             />
-            <AlgorithmSelector selectedAlgorithm={selectedAlgorithm} onSelect={setSelectedAlgorithm} />
+            <RecoveryPanel
+              processes={graphSnapshot.processes}
+              resources={graphSnapshot.resources}
+              edges={model.edges}
+              detection={displayDetection}
+              detectionIsCurrent={detectionIsCurrent}
+              onKillProcess={handleKillProcess}
+              onReleaseResource={handleReleaseResource}
+            />
           </div>
-          <ExplanationPanel selectedAlgorithm={selectedAlgorithm} />
         </section>
 
-        <SimulationBoard result={result} runId={runId} />
-
-        <div ref={resultRef} className="grid gap-5">
-          <GanttChart result={result} />
-          <StatsCards result={result} />
-          <ResultTable result={result} />
-
-          {result && (
-            <motion.section
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-slate-200 bg-white/86 p-4 shadow-soft dark:border-slate-800 dark:bg-slate-950/78"
-            >
-              <div className="mb-3">
-                <p className="text-sm font-semibold text-sky-700 dark:text-sky-300">Nhận xét sau khi chạy</p>
-                <h2 className="text-xl font-bold text-slate-950 dark:text-white">Giải thích kết quả</h2>
-              </div>
-              <ul className="grid gap-2 text-sm text-slate-600 dark:text-slate-300">
-                {observations.map((observation) => (
-                  <li
-                    key={observation}
-                    className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/80"
-                  >
-                    {observation}
-                  </li>
-                ))}
-              </ul>
-            </motion.section>
-          )}
-        </div>
-
-        <ComparisonTable />
-        <Glossary />
+        <section className="grid gap-5 xl:grid-cols-[1fr_380px]">
+          <TheoryPanel />
+          <EventLog logs={eventLog} />
+        </section>
       </main>
     </div>
   );
